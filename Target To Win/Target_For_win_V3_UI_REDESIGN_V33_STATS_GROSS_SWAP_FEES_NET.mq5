@@ -4,8 +4,7 @@
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
 
-#property strict
-#property version   "3.00"
+#property version   "3.10"
 #property description "Trading Target Manager - Dashboard MT5"
 
 //====================================================================
@@ -102,6 +101,71 @@ int g_scroll_stats  = 0;
 
 const int DATA_ROWS_VISIBLE = 25;
 
+// Limite massimo di giorni lavorativi pianificabili.
+// Gli array del simulatore/piano sono da 367: teniamo un margine ampio.
+const int MAX_WORKING_DAYS = 260;
+
+int ClampWorkingDays(int d)
+{
+   if(d < 1) return 1;
+   if(d > MAX_WORKING_DAYS) return MAX_WORKING_DAYS;
+   return d;
+}
+
+//====================================================================
+// PARSING NUMERICO TOLLERANTE
+// Accetta sia il formato con punto decimale ("1000.50")
+// sia quello all'italiana ("1.000,50" o "1000,50").
+// Rimuove spazi e apostrofi usati come separatore migliaia.
+//====================================================================
+double ParseNumber(string s)
+{
+   StringTrimLeft(s);
+   StringTrimRight(s);
+
+   StringReplace(s," ","");
+   StringReplace(s,"'","");
+   StringReplace(s," ","");   // spazio insecabile
+
+   bool has_dot   = (StringFind(s,".") >= 0);
+   bool has_comma = (StringFind(s,",") >= 0);
+
+   if(has_dot && has_comma)
+   {
+      // Il separatore decimale e' l'ultimo simbolo che compare.
+      if(StringFind(s,",") > StringFind(s,"."))
+      {
+         StringReplace(s,".","");   // punti = migliaia
+         StringReplace(s,",",".");  // virgola = decimale
+      }
+      else
+      {
+         StringReplace(s,",","");   // virgole = migliaia
+      }
+   }
+   else
+   if(has_comma)
+   {
+      StringReplace(s,",",".");
+   }
+
+   return StringToDouble(s);
+}
+
+int ParseInteger(string s)
+{
+   return (int)MathRound(ParseNumber(s));
+}
+
+long ParseLong(string s)
+{
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   StringReplace(s," ","");
+   StringReplace(s,"'","");
+   return (long)StringToInteger(s);
+}
+
 //====================================================================
 // RISK MANAGER
 //====================================================================
@@ -183,6 +247,9 @@ string O_TARGET_EDIT  = PREFIX + "TARGET_EDIT";
 
 string O_DAYS_LABEL = PREFIX + "DAYS_LABEL";
 string O_DAYS_EDIT  = PREFIX + "DAYS_EDIT";
+
+string O_START_LABEL = PREFIX + "START_LABEL";
+string O_START_EDIT  = PREFIX + "START_EDIT";
 
 string O_MINUS = PREFIX + "MINUS";
 string O_PLUS  = PREFIX + "PLUS";
@@ -1390,7 +1457,7 @@ string StrategyScopeText()
    if(g_strategy_scope_account)
       return "ACCOUNT";
 
-   return "MAGIC "+IntegerToString((int)g_strategy_magic);
+   return "MAGIC "+IntegerToString(g_strategy_magic);
 }
 
 double StrategyDailyTargetEUR()
@@ -1629,10 +1696,10 @@ bool LoadPersistentState()
       g_target_capital = GlobalVariableGet(StateKey("TARGET"));
 
    if(GlobalVariableCheck(StateKey("LIVE_DAYS")))
-      g_live_total_days = (int)GlobalVariableGet(StateKey("LIVE_DAYS"));
+      g_live_total_days = ClampWorkingDays((int)GlobalVariableGet(StateKey("LIVE_DAYS")));
 
    if(GlobalVariableCheck(StateKey("SIM_DAYS")))
-      g_sim_total_days = (int)GlobalVariableGet(StateKey("SIM_DAYS"));
+      g_sim_total_days = ClampWorkingDays((int)GlobalVariableGet(StateKey("SIM_DAYS")));
 
    if(GlobalVariableCheck(StateKey("RISK_ON")))
       g_strategy_enabled = GlobalVariableGet(StateKey("RISK_ON")) > 0.5;
@@ -1743,7 +1810,7 @@ void CreateDashboard()
    int H = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
 
    if(W < 1080) W = 1080;
-   if(H < 1220) H = 1220;
+   if(H < 1290) H = 1290;
 
    g_width  = W;
    g_height = H;
@@ -1794,14 +1861,14 @@ void CreateDashboard()
    if(g_current_page == 1)
    {
       int yParam = 140;
-      int hParam = 150;
+      int hParam = 200;
 
       CreatePanel(O_PARAM_PANEL, x, yParam, cw, hParam, PANEL_COLOR, BORDER_COLOR);
       CreateLabel(O_PARAM_TITLE, "PARAMETRI LIVE",
                   x+pad, yParam+16, 260, 22, BLUE_COLOR, 11);
 
-      int ly = yParam + 60;
-      int ey = yParam + 88;
+      int ly = yParam + 52;
+      int ey = yParam + 80;
 
       int c1 = x + pad;
       int c2 = x + 250;
@@ -1829,8 +1896,21 @@ void CreateDashboard()
       CreateButton(O_CALCULATE, "RICALCOLA", c4, ey, 150, 34);
       CreateButton(O_RESET, "RESET", c4+165, ey, 110, 34);
 
+      // Seconda riga: data di inizio percorso
+      int ly2 = yParam + 122;
+      int ey2 = yParam + 150;
+
+      CreateLabel(O_START_LABEL, "DATA INIZIO (AAAA.MM.GG)",
+                  c1, ly2, 220, 18, MUTED_COLOR, 8);
+      CreateEdit(O_START_EDIT, TimeToString(g_start_date, TIME_DATE),
+                 c1, ey2, 160, 34);
+
+      CreateLabel(ObjName("START_HINT"),
+                  "Giorno 1 del percorso. Modificabile: premi INVIO per applicare.",
+                  c2, ly2+8, cw - (c2 - x) - pad, 18, MUTED_COLOR, 8);
+
       // ACCOUNT
-      int yAcc = 314;
+      int yAcc = 364;
       int hAcc = 150;
 
       CreatePanel(O_ACCOUNT_PANEL, x, yAcc, cw, hAcc, PANEL_COLOR, BORDER_COLOR);
@@ -1864,7 +1944,7 @@ void CreateDashboard()
       CreateLabel(O_RETURN, "", a4+14, cardY+43, cardW-28, 22, TEXT_COLOR, 11);
 
       // REALTIME OGGI
-      int yRT = 481;
+      int yRT = 531;
       int hRT = 132;
 
       CreatePanel(ObjName("LIVE_RT_PANEL"), x, yRT, cw, hRT, PANEL_COLOR, BORDER_COLOR);
@@ -1900,7 +1980,7 @@ void CreateDashboard()
       // =============================================================
       // PROGRESSO TARGET GIORNALIERO
       // =============================================================
-      int yDaily = 630;
+      int yDaily = 680;
       int hDaily = 205;
 
       CreatePanel(
@@ -2017,7 +2097,7 @@ void CreateDashboard()
       // =============================================================
       // PROGRESSO TARGET GENERALE
       // =============================================================
-      int yProg = 852;
+      int yProg = 902;
       int hProg = 270;
 
       CreatePanel(O_PROGRESS_PANEL, x, yProg, cw, hProg, PANEL_COLOR, BORDER_COLOR);
@@ -2052,7 +2132,7 @@ void CreateDashboard()
       CreateLabel(O_REQUIRED_PCT, "", x+pad, yProg+236, 410, 26, TEXT_COLOR, 12);
       CreateLabel(O_REQUIRED_EURO, "", x+(int)(cw*0.56), yProg+236, 390, 26, TEXT_COLOR, 12);
 
-      int yStatus = 1138;
+      int yStatus = 1188;
       CreatePanel(PREFIX+"STATUS_BG", x, yStatus, cw, 58, PANEL_COLOR, BORDER_COLOR);
       CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 12);
    }
@@ -2141,7 +2221,7 @@ void CreateDashboard()
       CreateLabel(ObjName("ORD_HDR_TPE"),   "P/L@TP",  xTPeur, hdrY, 110,18,MUTED_COLOR,8);
       CreateLabel(ObjName("ORD_HDR_SLE"),   "P/L@SL",  xSLeur, hdrY, 110,18,MUTED_COLOR,8);
 
-      for(int r=1; r<=20; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          int yy = rowY + (r-1)*rowStep;
          string rr = IntegerToString(r);
@@ -2199,7 +2279,7 @@ void CreateDashboard()
       CreateLabel(ObjName("STRAT_MM_TITLE"),"MONEY MANAGEMENT",x+pad,yMM+14,300,20,BLUE_COLOR,10);
 
       CreateLabel(ObjName("STRAT_L_MAGIC"),"MAGIC",x+pad,yMM+52,70,18,MUTED_COLOR,8);
-      CreateEdit(ObjName("STRAT_MAGIC"),IntegerToString((int)g_strategy_magic),x+pad+75,yMM+45,125,32);
+      CreateEdit(ObjName("STRAT_MAGIC"),IntegerToString(g_strategy_magic),x+pad+75,yMM+45,125,32);
 
       CreateLabel(ObjName("STRAT_L_LOT"),"LOTTO",x+pad+230,yMM+52,65,18,MUTED_COLOR,8);
       CreateEdit(ObjName("STRAT_LOT"),DoubleToString(g_strategy_fixed_lot,2),x+pad+295,yMM+45,90,32);
@@ -3667,7 +3747,7 @@ void UpdateDashboard()
       );
 
       // pulizia righe
-      for(int r=1; r<=20; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          string rr = IntegerToString(r);
 
@@ -4303,31 +4383,20 @@ void ReadManualInputs()
          OBJPROP_TEXT
       );
 
-   double initial =
-      StringToDouble(
-         initial_text
-      );
-
-   double target =
-      StringToDouble(
-         target_text
-      );
-
-   int days =
-      (int)StringToInteger(
-         days_text
-      );
+   double initial = ParseNumber(initial_text);
+   double target  = ParseNumber(target_text);
+   int    days    = ParseInteger(days_text);
 
    if(initial > 0)
-      g_initial_capital =
-         initial;
+      g_initial_capital = initial;
 
    if(target > 0)
-      g_target_capital =
-         target;
+      g_target_capital = target;
 
    if(days > 0)
    {
+      days = ClampWorkingDays(days);
+
       if(g_simulator_mode)
          g_sim_total_days = days;
       else
@@ -4342,58 +4411,77 @@ void ReadManualInputs()
    if(g_simulator_mode && g_sim_day > g_sim_total_days)
       g_sim_day = g_sim_total_days;
 
+   // Campo DATA INIZIO (solo pagina LIVE)
+   if(ObjectFind(0,O_START_EDIT) >= 0)
+   {
+      string st = ObjectGetString(0,O_START_EDIT,OBJPROP_TEXT);
+      StringTrimLeft(st);
+      StringTrimRight(st);
+      StringReplace(st,"/",".");
+      StringReplace(st,"-",".");
+
+      datetime parsed = StringToTime(st);
+      if(parsed > 0)
+      {
+         MqlDateTime pdt;
+         TimeToStruct(parsed,pdt);
+         pdt.hour = 0; pdt.min = 0; pdt.sec = 0;
+         g_start_date = StructToTime(pdt);
+      }
+   }
+
    // Campi STRATEGIA
    if(ObjectFind(0,ObjName("STRAT_MAGIC"))>=0)
    {
-      long v=(long)StringToInteger(ObjectGetString(0,ObjName("STRAT_MAGIC"),OBJPROP_TEXT));
+      long v=ParseLong(ObjectGetString(0,ObjName("STRAT_MAGIC"),OBJPROP_TEXT));
       if(v>=0) g_strategy_magic=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_LOT"))>=0)
    {
-      double v=StringToDouble(ObjectGetString(0,ObjName("STRAT_LOT"),OBJPROP_TEXT));
+      double v=ParseNumber(ObjectGetString(0,ObjName("STRAT_LOT"),OBJPROP_TEXT));
       if(v>0) g_strategy_fixed_lot=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_MAXPOS"))>=0)
    {
-      int v=(int)StringToInteger(ObjectGetString(0,ObjName("STRAT_MAXPOS"),OBJPROP_TEXT));
+      int v=ParseInteger(ObjectGetString(0,ObjName("STRAT_MAXPOS"),OBJPROP_TEXT));
       if(v>0) g_strategy_max_open_positions=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_MAXTR"))>=0)
    {
-      int v=(int)StringToInteger(ObjectGetString(0,ObjName("STRAT_MAXTR"),OBJPROP_TEXT));
+      int v=ParseInteger(ObjectGetString(0,ObjName("STRAT_MAXTR"),OBJPROP_TEXT));
       if(v>0) g_strategy_max_trades_day=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_TP"))>=0)
    {
-      double v=StringToDouble(ObjectGetString(0,ObjName("STRAT_TP"),OBJPROP_TEXT));
+      double v=ParseNumber(ObjectGetString(0,ObjName("STRAT_TP"),OBJPROP_TEXT));
       if(v>0) g_strategy_tp_eur=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_SL"))>=0)
    {
-      double v=StringToDouble(ObjectGetString(0,ObjName("STRAT_SL"),OBJPROP_TEXT));
+      double v=ParseNumber(ObjectGetString(0,ObjName("STRAT_SL"),OBJPROP_TEXT));
       if(v>0) g_strategy_sl_eur=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_LOSSLIM"))>=0)
    {
-      double v=StringToDouble(ObjectGetString(0,ObjName("STRAT_LOSSLIM"),OBJPROP_TEXT));
+      double v=ParseNumber(ObjectGetString(0,ObjName("STRAT_LOSSLIM"),OBJPROP_TEXT));
       if(v>0) g_strategy_daily_loss_limit=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_LOSSES"))>=0)
    {
-      int v=(int)StringToInteger(ObjectGetString(0,ObjName("STRAT_LOSSES"),OBJPROP_TEXT));
+      int v=ParseInteger(ObjectGetString(0,ObjName("STRAT_LOSSES"),OBJPROP_TEXT));
       if(v>0) g_strategy_losses_before_pause=v;
    }
 
    if(ObjectFind(0,ObjName("STRAT_PAUSE"))>=0)
    {
-      int v=(int)StringToInteger(ObjectGetString(0,ObjName("STRAT_PAUSE"),OBJPROP_TEXT));
+      int v=ParseInteger(ObjectGetString(0,ObjName("STRAT_PAUSE"),OBJPROP_TEXT));
       if(v>0) g_strategy_pause_minutes=v;
    }
 
@@ -4401,13 +4489,7 @@ void ReadManualInputs()
    if(ObjectFind(0,ObjName("SIM_CAP_EDIT")) >= 0)
    {
       double sim_cap =
-         StringToDouble(
-            ObjectGetString(
-               0,
-               ObjName("SIM_CAP_EDIT"),
-               OBJPROP_TEXT
-            )
-         );
+         ParseNumber(ObjectGetString(0,ObjName("SIM_CAP_EDIT"),OBJPROP_TEXT));
 
       if(sim_cap > 0)
          g_sim_capital = sim_cap;
@@ -4416,13 +4498,7 @@ void ReadManualInputs()
    if(ObjectFind(0,ObjName("SIM_DAY_EDIT")) >= 0)
    {
       int sim_day =
-         (int)StringToInteger(
-            ObjectGetString(
-               0,
-               ObjName("SIM_DAY_EDIT"),
-               OBJPROP_TEXT
-            )
-         );
+         ParseInteger(ObjectGetString(0,ObjName("SIM_DAY_EDIT"),OBJPROP_TEXT));
 
       if(sim_day < 1) sim_day = 1;
       if(sim_day > g_total_days) sim_day = g_total_days;
@@ -4433,13 +4509,7 @@ void ReadManualInputs()
    if(ObjectFind(0,ObjName("SIM_RESULT_EDIT")) >= 0)
    {
       g_sim_day_result_input =
-         StringToDouble(
-            ObjectGetString(
-               0,
-               ObjName("SIM_RESULT_EDIT"),
-               OBJPROP_TEXT
-            )
-         );
+         ParseNumber(ObjectGetString(0,ObjName("SIM_RESULT_EDIT"),OBJPROP_TEXT));
    }
    SavePersistentState();
 }
@@ -4519,10 +4589,13 @@ int OnInit()
    // ancora uno stato persistente per questo account.
    g_initial_capital = InpInitialCapital;
    g_target_capital  = InpTargetCapital;
-   g_live_total_days = InpWorkingDays;
-   g_sim_total_days  = InpWorkingDays;
+   g_live_total_days = ClampWorkingDays(InpWorkingDays);
+   g_sim_total_days  = ClampWorkingDays(InpWorkingDays);
 
    bool state_loaded = LoadPersistentState();
+
+   g_live_total_days = ClampWorkingDays(g_live_total_days);
+   g_sim_total_days  = ClampWorkingDays(g_sim_total_days);
 
    g_total_days =
       g_simulator_mode
@@ -4538,20 +4611,17 @@ int OnInit()
    //---------------------------------------------------------------
    // DATA DI PARTENZA
    //
-   // Per questa prima V3 la partenza è il momento di caricamento EA.
+   // Alla prima installazione (nessuno stato persistente) si parte da
+   // OGGI. L'utente puo' correggerla dal campo "DATA INIZIO" nella
+   // pagina LIVE; il valore viene poi salvato nello stato persistente.
    //---------------------------------------------------------------
 
    if(!state_loaded || g_start_date <= 0)
    {
-      // Prima installazione della V31:
-      // se esiste storico, recuperiamo la prima data disponibile;
-      // altrimenti partiamo da adesso.
-      datetime recovered_start = FindEarliestAccountDealTime();
-
-      g_start_date =
-         recovered_start > 0
-         ? recovered_start
-         : TimeCurrent();
+      MqlDateTime sdt;
+      TimeToStruct(TimeCurrent(),sdt);
+      sdt.hour = 0; sdt.min = 0; sdt.sec = 0;
+      g_start_date = StructToTime(sdt);
 
       SavePersistentState();
    }
@@ -4690,12 +4760,30 @@ void OnChartEvent(
          sparam == O_INITIAL_EDIT ||
          sparam == O_TARGET_EDIT  ||
          sparam == O_DAYS_EDIT    ||
+         sparam == O_START_EDIT   ||
+         sparam == ObjName("STRAT_MAGIC")   ||
+         sparam == ObjName("STRAT_LOT")     ||
+         sparam == ObjName("STRAT_MAXPOS")  ||
+         sparam == ObjName("STRAT_MAXTR")   ||
+         sparam == ObjName("STRAT_TP")      ||
+         sparam == ObjName("STRAT_SL")      ||
+         sparam == ObjName("STRAT_LOSSLIM") ||
+         sparam == ObjName("STRAT_LOSSES")  ||
+         sparam == ObjName("STRAT_PAUSE")   ||
          sparam == ObjName("SIM_CAP_EDIT") ||
          sparam == ObjName("SIM_DAY_EDIT") ||
          sparam == ObjName("SIM_RESULT_EDIT")
       )
       {
          ReadManualInputs();
+
+         if(ObjectFind(0,O_START_EDIT) >= 0)
+            ObjectSetString(
+               0,
+               O_START_EDIT,
+               OBJPROP_TEXT,
+               TimeToString(g_start_date, TIME_DATE)
+            );
 
          // Risincronizza i valori visualizzati con quelli accettati
          ObjectSetString(
@@ -4724,13 +4812,12 @@ void OnChartEvent(
          );
 
          if(ObjectFind(0,ObjName("SIM_CAP_EDIT")) >= 0)
-            if(ObjectFind(0,ObjName("SIM_CAP_EDIT")) >= 0)
-               ObjectSetString(
-                  0,
-                  ObjName("SIM_CAP_EDIT"),
-                  OBJPROP_TEXT,
-                  DoubleToString(g_sim_capital,2)
-               );
+            ObjectSetString(
+               0,
+               ObjName("SIM_CAP_EDIT"),
+               OBJPROP_TEXT,
+               DoubleToString(g_sim_capital,2)
+            );
 
          if(ObjectFind(0,ObjName("SIM_DAY_EDIT")) >= 0)
             ObjectSetString(
@@ -4763,7 +4850,8 @@ void OnChartEvent(
       if(
          sparam == O_INITIAL_EDIT ||
          sparam == O_TARGET_EDIT  ||
-         sparam == O_DAYS_EDIT
+         sparam == O_DAYS_EDIT    ||
+         sparam == O_START_EDIT
       )
       {
          ObjectSetInteger(0,sparam,OBJPROP_READONLY,false);
@@ -5004,13 +5092,12 @@ void OnChartEvent(
          g_sim_capital = g_initial_capital;
 
          if(ObjectFind(0,ObjName("SIM_CAP_EDIT")) >= 0)
-            if(ObjectFind(0,ObjName("SIM_CAP_EDIT")) >= 0)
-               ObjectSetString(
-                  0,
-                  ObjName("SIM_CAP_EDIT"),
-                  OBJPROP_TEXT,
-                  DoubleToString(g_sim_capital,2)
-               );
+            ObjectSetString(
+               0,
+               ObjName("SIM_CAP_EDIT"),
+               OBJPROP_TEXT,
+               DoubleToString(g_sim_capital,2)
+            );
 
          if(ObjectFind(0,ObjName("SIM_DAY_EDIT")) >= 0)
             ObjectSetString(
@@ -5227,7 +5314,7 @@ void OnChartEvent(
             ? g_sim_total_days
             : g_live_total_days;
 
-         g_total_days++;
+         g_total_days = ClampWorkingDays(g_total_days + 1);
 
          if(g_simulator_mode)
             g_sim_total_days = g_total_days;
@@ -5264,8 +5351,7 @@ void OnChartEvent(
             ? g_sim_total_days
             : g_live_total_days;
 
-         if(g_total_days > 1)
-            g_total_days--;
+         g_total_days = ClampWorkingDays(g_total_days - 1);
 
          if(g_simulator_mode)
             g_sim_total_days = g_total_days;

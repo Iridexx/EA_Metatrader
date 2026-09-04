@@ -184,7 +184,8 @@ bool     g_strategy_daily_target_auto   = true;
 double   g_strategy_daily_target_manual = 15.00;
 double   g_strategy_daily_loss_limit    = 7.20;
 
-bool     g_strategy_close_on_limit      = false;
+bool     g_strategy_alert_on_limit      = false;   // Alert MT5 quando scatta il lock giornaliero
+bool     g_strategy_limit_alerted       = false;   // gia' avvisato per la giornata corrente
 
 int      g_strategy_losses_before_pause = 2;
 int      g_strategy_pause_minutes       = 60;
@@ -192,8 +193,8 @@ int      g_strategy_consec_losses       = 0;
 int      g_strategy_consec_wins         = 0;
 datetime g_strategy_pause_until         = 0;
 bool     g_strategy_daily_locked        = false;
-ulong    g_strategy_last_deal           = 0;
 datetime g_strategy_day                 = 0;
+bool     g_strategy_force_refresh       = true;   // forza il ricalcolo serie/pausa al prossimo giro
 
 
 
@@ -220,6 +221,10 @@ bool g_target_reached = false;
 
 int g_width  = 760;
 int g_height = 760;
+
+// Dimensione reale (non clampata) del grafico all'ultimo rebuild.
+int g_chart_px_w = 0;
+int g_chart_px_h = 0;
 
 // Area utile della dashboard: centrata e con larghezza massima.
 // In questo modo su monitor larghi il pannello non si "stira" per 1800 px.
@@ -1201,6 +1206,14 @@ struct SymbolStats
 
 //====================================================================
 // COSTRUISCI STATS
+//
+// Componenti economiche (lordo/swap/commissioni) come prima: il NETTO
+// per simbolo riconcilia con i totali del conto MT5.
+//
+// Win/Loss ora sul NETTO REALE PER POSIZIONE = somma di lordo + swap +
+// TUTTE le commissioni (ingresso + uscita) di quella posizione. Una
+// posizione con netto negativo non puo' piu' risultare "WIN".
+// "trades" = numero di posizioni chiuse (chiusure parziali contano 1).
 //====================================================================
 
 int GetSymbolStats(
@@ -1215,33 +1228,35 @@ int GetSymbolStats(
 
    int total = HistoryDealsTotal();
 
-   // ---------------------------------------------------------------
-   // PASS 1:
-   // crea le righe dai deal di CHIUSURA e somma profitto lordo + swap.
-   // Win/Loss vengono determinati sul risultato netto disponibile
-   // sul deal di chiusura (profit + swap + commissione del deal).
-   // ---------------------------------------------------------------
+   // Accumulo per POSIZIONE (per il conteggio W/L sul netto reale).
+   ulong  pos_id[];
+   string pos_sym[];
+   double pos_net[];
+   bool   pos_closed[];
+   int    pos_n = 0;
+
    for(int i=0; i<total; i++)
    {
       ulong ticket = HistoryDealGetTicket(i);
       if(ticket == 0)
          continue;
 
-      long entry = HistoryDealGetInteger(ticket,DEAL_ENTRY);
-
-      if(entry != DEAL_ENTRY_OUT &&
-         entry != DEAL_ENTRY_OUT_BY &&
-         entry != DEAL_ENTRY_INOUT)
-      {
-         continue;
-      }
-
       string symbol = HistoryDealGetString(ticket,DEAL_SYMBOL);
       if(symbol == "")
          continue;
 
-      int index = -1;
+      long   entry = HistoryDealGetInteger(ticket,DEAL_ENTRY);
+      double gross = HistoryDealGetDouble(ticket,DEAL_PROFIT);
+      double swp   = HistoryDealGetDouble(ticket,DEAL_SWAP);
+      double comm  = HistoryDealGetDouble(ticket,DEAL_COMMISSION);
 
+      bool is_close =
+         (entry == DEAL_ENTRY_OUT ||
+          entry == DEAL_ENTRY_OUT_BY ||
+          entry == DEAL_ENTRY_INOUT);
+
+      // Riga simbolo
+      int index = -1;
       for(int j=0; j<ArraySize(stats); j++)
       {
          if(stats[j].symbol == symbol)
@@ -1266,48 +1281,63 @@ int GetSymbolStats(
          stats[index].profit       = 0.0;
       }
 
-      double gross = HistoryDealGetDouble(ticket,DEAL_PROFIT);
-      double swp   = HistoryDealGetDouble(ticket,DEAL_SWAP);
-      double comm_close = HistoryDealGetDouble(ticket,DEAL_COMMISSION);
+      // Commissione: da TUTTI i deal (ingresso + uscita).
+      stats[index].commission += comm;
 
-      double deal_net = gross + swp + comm_close;
+      // Lordo e swap: solo dai deal di chiusura.
+      if(is_close)
+      {
+         stats[index].gross_profit += gross;
+         stats[index].swap         += swp;
+      }
 
-      stats[index].trades++;
-      stats[index].gross_profit += gross;
-      stats[index].swap += swp;
+      // Accumulo per posizione.
+      ulong pid = (ulong)HistoryDealGetInteger(ticket,DEAL_POSITION_ID);
+      if(pid > 0)
+      {
+         int pi = -1;
+         for(int j=0; j<pos_n; j++)
+         {
+            if(pos_id[j] == pid)
+            {
+               pi = j;
+               break;
+            }
+         }
 
-      if(deal_net > 0.0000001)
-         stats[index].wins++;
-      else
-      if(deal_net < -0.0000001)
-         stats[index].losses++;
+         if(pi < 0)
+         {
+            pi = pos_n;
+            pos_n++;
+            ArrayResize(pos_id,pos_n);
+            ArrayResize(pos_sym,pos_n);
+            ArrayResize(pos_net,pos_n);
+            ArrayResize(pos_closed,pos_n);
+
+            pos_id[pi]     = pid;
+            pos_sym[pi]    = symbol;
+            pos_net[pi]    = 0.0;
+            pos_closed[pi] = false;
+         }
+
+         pos_net[pi] += gross + swp + comm;
+         if(is_close)
+            pos_closed[pi] = true;
+      }
    }
 
-   // ---------------------------------------------------------------
-   // PASS 2:
-   // somma TUTTE le commissioni dei deal dei simboli già presenti.
-   //
-   // Alcuni broker addebitano commissione all'INGRESSO e alla CHIUSURA.
-   // Se leggessimo solo DEAL_ENTRY_OUT, una parte delle fee potrebbe
-   // risultare "nascosta" e il netto non coincidere con MT5.
-   // ---------------------------------------------------------------
-   for(int i=0; i<total; i++)
+   // Aggrega W/L per simbolo dalle posizioni chiuse.
+   for(int j=0; j<pos_n; j++)
    {
-      ulong ticket = HistoryDealGetTicket(i);
-      if(ticket == 0)
-         continue;
-
-      string symbol = HistoryDealGetString(ticket,DEAL_SYMBOL);
-      if(symbol == "")
+      if(!pos_closed[j])
          continue;
 
       int index = -1;
-
-      for(int j=0; j<ArraySize(stats); j++)
+      for(int k=0; k<ArraySize(stats); k++)
       {
-         if(stats[j].symbol == symbol)
+         if(stats[k].symbol == pos_sym[j])
          {
-            index = j;
+            index = k;
             break;
          }
       }
@@ -1315,8 +1345,13 @@ int GetSymbolStats(
       if(index < 0)
          continue;
 
-      stats[index].commission +=
-         HistoryDealGetDouble(ticket,DEAL_COMMISSION);
+      stats[index].trades++;
+
+      if(pos_net[j] > 0.0000001)
+         stats[index].wins++;
+      else
+      if(pos_net[j] < -0.0000001)
+         stats[index].losses++;
    }
 
    // Netto finale esplicito.
@@ -1329,6 +1364,31 @@ int GetSymbolStats(
    }
 
    return ArraySize(stats);
+}
+
+//====================================================================
+// CACHE STATISTICHE
+// GetSymbolStats() scansiona tutto lo storico: lo facciamo al massimo
+// ogni 10s, o subito dopo un evento trade (g_stats_cache_time=0).
+//====================================================================
+datetime    g_stats_cache_time = 0;
+SymbolStats g_stats_cache[];
+
+int GetSymbolStatsCached(SymbolStats &out[])
+{
+   if(g_stats_cache_time == 0 ||
+      TimeCurrent() - g_stats_cache_time >= 10)
+   {
+      GetSymbolStats(g_stats_cache);
+      g_stats_cache_time = TimeCurrent();
+   }
+
+   int n = ArraySize(g_stats_cache);
+   ArrayResize(out,n);
+   for(int i=0; i<n; i++)
+      out[i] = g_stats_cache[i];
+
+   return n;
 }
 //====================================================================
 // CREAZIONE DASHBOARD
@@ -1460,6 +1520,18 @@ string StrategyScopeText()
    return "MAGIC "+IntegerToString(g_strategy_magic);
 }
 
+// Giorni lavorativi COMPLETATI dal percorso LIVE (esclude oggi).
+// Ricalcolato da g_start_date: non dipende dal fatto che CalculateTarget()
+// sia stato eseguito in questo ciclo.
+int LiveCompletedDays()
+{
+   int seen = WorkingDaysBetween(g_start_date, TimeCurrent());
+   int completed = seen - 1;
+   if(completed < 0) completed = 0;
+   if(completed > g_live_total_days) completed = g_live_total_days;
+   return completed;
+}
+
 double StrategyDailyTargetEUR()
 {
    if(!g_strategy_daily_target_auto)
@@ -1468,8 +1540,7 @@ double StrategyDailyTargetEUR()
    // Stesso target giornaliero del LIVE.
    double start=GetLiveDayStartCapital();
 
-   int completed=g_days_elapsed-1;
-   if(completed<0) completed=0;
+   int completed=LiveCompletedDays();
 
    int remaining=g_live_total_days-completed;
    if(remaining<1) remaining=1;
@@ -1509,23 +1580,105 @@ void StrategyResetDay()
    g_strategy_pause_until=0;
    g_strategy_consec_losses=0;
    g_strategy_consec_wins=0;
-   g_strategy_last_deal=0;
+   g_strategy_limit_alerted=false;
+   g_strategy_force_refresh=true;
    SavePersistentState();
+}
+
+// Ricalcola le serie W/L consecutive e la finestra di pausa leggendo i
+// deal CHIUSI di oggi in ordine cronologico. Nessuno stato incrementale:
+// il risultato e' sempre corretto anche dopo reload / disconnessioni.
+void StrategyRecomputeSeries()
+{
+   g_strategy_consec_wins=0;
+   g_strategy_consec_losses=0;
+   g_strategy_pause_until=0;
+
+   if(!HistorySelect(StrategyDayStart(),TimeCurrent()))
+      return;
+
+   int losses_since_pause=0;
+   int total=HistoryDealsTotal();
+
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0 || !StrategyDealMatches(deal))
+         continue;
+
+      ENUM_DEAL_ENTRY entry=
+         (ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);
+
+      if(entry!=DEAL_ENTRY_OUT &&
+         entry!=DEAL_ENTRY_OUT_BY &&
+         entry!=DEAL_ENTRY_INOUT)
+         continue;
+
+      double net=HistoryDealGetDouble(deal,DEAL_PROFIT)
+                +HistoryDealGetDouble(deal,DEAL_SWAP)
+                +HistoryDealGetDouble(deal,DEAL_COMMISSION);
+
+      datetime dt=(datetime)HistoryDealGetInteger(deal,DEAL_TIME);
+
+      if(net>0.0000001)
+      {
+         g_strategy_consec_wins++;
+         g_strategy_consec_losses=0;
+         losses_since_pause=0;
+      }
+      else
+      if(net<-0.0000001)
+      {
+         g_strategy_consec_losses++;
+         g_strategy_consec_wins=0;
+         losses_since_pause++;
+
+         if(g_strategy_losses_before_pause>0 &&
+            losses_since_pause>=g_strategy_losses_before_pause)
+         {
+            g_strategy_pause_until=dt+g_strategy_pause_minutes*60;
+            losses_since_pause=0;
+         }
+      }
+   }
 }
 
 void StrategyRefreshState()
 {
    StrategyResetDay();
 
+   // Ricalcolo pesante (scansione storico) al massimo ogni 10 secondi,
+   // oppure subito se e' arrivato un evento trade.
+   static datetime last_calc=0;
+   if(g_strategy_force_refresh || TimeCurrent()-last_calc>=10)
+   {
+      last_calc=TimeCurrent();
+      g_strategy_force_refresh=false;
+      StrategyRecomputeSeries();
+   }
+
    double closed=StrategyTodayClosedResult();
    double target=StrategyDailyTargetEUR();
 
+   // Il lock giornaliero e' "sticky": una volta scattato resta fino al
+   // cambio di giornata (StrategyResetDay).
    if(target>0 && closed>=target)
       g_strategy_daily_locked=true;
 
    if(g_strategy_daily_loss_limit>0 &&
       closed<=-g_strategy_daily_loss_limit)
       g_strategy_daily_locked=true;
+
+   // Avviso MT5 una sola volta al giorno quando scatta il lock.
+   if(g_strategy_alert_on_limit &&
+      g_strategy_daily_locked &&
+      !g_strategy_limit_alerted)
+   {
+      g_strategy_limit_alerted=true;
+      Alert("TTM: limite giornaliero raggiunto (realizzato ",
+            DoubleToString(closed,2),
+            " EUR). Stop operativita' consigliato.");
+   }
 
    SavePersistentState();
 }
@@ -1536,7 +1689,7 @@ bool StrategyCanTrade(string &reason)
 
    if(!g_strategy_enabled)
    {
-      reason="RISK MANAGER OFF";
+      reason="MONITOR OFF";
       return false;
    }
 
@@ -1659,24 +1812,36 @@ string StateKey(string suffix)
    return "TTM_" + login + "_" + suffix;
 }
 
+// Scrive la Global Variable solo se il valore e' effettivamente cambiato.
+// Evita la riscrittura continua su disco (SavePersistentState viene
+// invocata anche a ogni tick del timer).
+void GVSetIfChanged(string key, double value)
+{
+   if(GlobalVariableCheck(key) &&
+      MathAbs(GlobalVariableGet(key) - value) < 0.0000001)
+      return;
+
+   GlobalVariableSet(key, value);
+}
+
 void SavePersistentState()
 {
-   GlobalVariableSet(StateKey("START"),      (double)g_start_date);
-   GlobalVariableSet(StateKey("INITIAL"),    g_initial_capital);
-   GlobalVariableSet(StateKey("TARGET"),     g_target_capital);
-   GlobalVariableSet(StateKey("LIVE_DAYS"),  (double)g_live_total_days);
-   GlobalVariableSet(StateKey("SIM_DAYS"),   (double)g_sim_total_days);
+   GVSetIfChanged(StateKey("START"),      (double)g_start_date);
+   GVSetIfChanged(StateKey("INITIAL"),    g_initial_capital);
+   GVSetIfChanged(StateKey("TARGET"),     g_target_capital);
+   GVSetIfChanged(StateKey("LIVE_DAYS"),  (double)g_live_total_days);
+   GVSetIfChanged(StateKey("SIM_DAYS"),   (double)g_sim_total_days);
 
-   GlobalVariableSet(StateKey("RISK_ON"),    g_strategy_enabled ? 1.0 : 0.0);
-   GlobalVariableSet(StateKey("RISK_SCOPE"), g_strategy_scope_account ? 1.0 : 0.0);
-   GlobalVariableSet(StateKey("MAGIC"),       (double)g_strategy_magic);
+   GVSetIfChanged(StateKey("RISK_ON"),    g_strategy_enabled ? 1.0 : 0.0);
+   GVSetIfChanged(StateKey("RISK_SCOPE"), g_strategy_scope_account ? 1.0 : 0.0);
+   GVSetIfChanged(StateKey("MAGIC"),      (double)g_strategy_magic);
 
-   GlobalVariableSet(StateKey("DAILY_LOCK"), g_strategy_daily_locked ? 1.0 : 0.0);
-   GlobalVariableSet(StateKey("PAUSE_UNTIL"),(double)g_strategy_pause_until);
-   GlobalVariableSet(StateKey("STRAT_DAY"),  (double)g_strategy_day);
+   GVSetIfChanged(StateKey("DAILY_LOCK"), g_strategy_daily_locked ? 1.0 : 0.0);
+   GVSetIfChanged(StateKey("PAUSE_UNTIL"),(double)g_strategy_pause_until);
+   GVSetIfChanged(StateKey("STRAT_DAY"),  (double)g_strategy_day);
 
-   GlobalVariableSet(StateKey("CONS_LOSS"),  (double)g_strategy_consec_losses);
-   GlobalVariableSet(StateKey("CONS_WIN"),   (double)g_strategy_consec_wins);
+   GVSetIfChanged(StateKey("CONS_LOSS"),  (double)g_strategy_consec_losses);
+   GVSetIfChanged(StateKey("CONS_WIN"),   (double)g_strategy_consec_wins);
 }
 
 bool LoadPersistentState()
@@ -1809,6 +1974,9 @@ void CreateDashboard()
    int W = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0);
    int H = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
 
+   g_chart_px_w = W;
+   g_chart_px_h = H;
+
    if(W < 1080) W = 1080;
    if(H < 1290) H = 1290;
 
@@ -1850,7 +2018,7 @@ void CreateDashboard()
 
    CreateButton(ObjName("PAGE_DASH"), "LIVE",        n1, navY, 110, 32);
    CreateButton(ObjName("PAGE_ORD"),  "ORDINI",      n2, navY, 110, 32);
-   CreateButton(ObjName("PAGE_STRAT"),"RISK MANAGER",   n3, navY, 135, 32);
+   CreateButton(ObjName("PAGE_STRAT"),"RISK MONITOR",   n3, navY, 135, 32);
    CreateButton(ObjName("PAGE_SIM"),  "SIMULATORE",  n4, navY, 145, 32);
    CreateButton(ObjName("PAGE_PLAN"), "PIANO",       n5, navY, 105, 32);
    CreateButton(ObjName("PAGE_STAT"), "STATISTICHE", n6, navY, 145, 32);
@@ -2248,7 +2416,7 @@ void CreateDashboard()
       int yTop=140;
 
       CreatePanel(ObjName("STRAT_STATUS_PANEL"),x,yTop,cw,118,PANEL_COLOR,BORDER_COLOR);
-      CreateLabel(ObjName("STRAT_TITLE"),"RISK MANAGER",x+pad,yTop+14,380,20,BLUE_COLOR,11);
+      CreateLabel(ObjName("STRAT_TITLE"),"RISK MONITOR (solo visualizzazione - non invia ordini)",x+pad,yTop+14,700,20,BLUE_COLOR,11);
 
       int gap=18;
       int cardW=(cw-pad*2-gap*3)/4;
@@ -2276,7 +2444,7 @@ void CreateDashboard()
 
       int yMM=276;
       CreatePanel(ObjName("STRAT_MM"),x,yMM,cw,190,PANEL_COLOR,BORDER_COLOR);
-      CreateLabel(ObjName("STRAT_MM_TITLE"),"MONEY MANAGEMENT",x+pad,yMM+14,300,20,BLUE_COLOR,10);
+      CreateLabel(ObjName("STRAT_MM_TITLE"),"CALCOLATORE TP/SL (riferimento per trading manuale)",x+pad,yMM+14,700,20,BLUE_COLOR,10);
 
       CreateLabel(ObjName("STRAT_L_MAGIC"),"MAGIC",x+pad,yMM+52,70,18,MUTED_COLOR,8);
       CreateEdit(ObjName("STRAT_MAGIC"),IntegerToString(g_strategy_magic),x+pad+75,yMM+45,125,32);
@@ -2296,7 +2464,7 @@ void CreateDashboard()
       CreateLabel(ObjName("STRAT_L_SL"),"SL EUR",x+pad+230,yMM+104,80,18,MUTED_COLOR,8);
       CreateEdit(ObjName("STRAT_SL"),DoubleToString(g_strategy_sl_eur,2),x+pad+295,yMM+97,90,32);
 
-      CreateButton(ObjName("STRAT_TOGGLE"),g_strategy_enabled ? "RISK MANAGER OFF" : "RISK MANAGER ON",
+      CreateButton(ObjName("STRAT_TOGGLE"),g_strategy_enabled ? "MONITOR: ON" : "MONITOR: OFF",
                    x+pad,yMM+145,145,32);
       CreateButton(ObjName("STRAT_SCOPE_BTN"),g_strategy_scope_account ? "AMBITO: ACCOUNT" : "AMBITO: MAGIC",
                    x+pad+165,yMM+145,190,32);
@@ -2323,7 +2491,7 @@ void CreateDashboard()
                    x+pad,yDaily+140,190,32);
 
       CreateButton(ObjName("STRAT_CLOSE_LIMIT"),
-                   g_strategy_close_on_limit ? "CHIUDI SU LIMITE: SI" : "CHIUDI SU LIMITE: NO",
+                   g_strategy_alert_on_limit ? "AVVISO SU LIMITE: SI" : "AVVISO SU LIMITE: NO",
                    x+pad+210,yDaily+140,210,32);
 
       CreateLabel(ObjName("STRAT_D_LOCK"),"",x+pad,yDaily+188,430,22,TEXT_COLOR,10);
@@ -3139,8 +3307,8 @@ void UpdateDashboard()
       int trades=StrategyTradesToday();
       int positions=StrategyOpenPositions();
 
-      string state="RISK MANAGER ON";
-      if(!g_strategy_enabled) state="RISK MANAGER OFF";
+      string state="MONITOR ON";
+      if(!g_strategy_enabled) state="MONITOR OFF";
       else if(g_strategy_daily_locked) state="DAILY LOCK";
       else if(TimeCurrent()<g_strategy_pause_until) state="IN PAUSA";
 
@@ -3215,9 +3383,9 @@ void UpdateDashboard()
       bool canTrade=StrategyCanTrade(reason);
 
       ObjectSetString(0,ObjName("STRAT_TECH4"),OBJPROP_TEXT,
-                      "Nuovo trade: "+(canTrade?"CONSENTITO":"BLOCCATO")+
+                      "Valutazione monitor: "+(canTrade?"OPERATIVITA' OK":"OPERATIVITA' DA EVITARE")+
                       "  |  "+reason+
-                      "  |  Persistenza lock: ATTIVA");
+                      "  |  (il monitor non apre/chiude posizioni)");
 
       ObjectSetInteger(0,ObjName("STRAT_TECH4"),OBJPROP_COLOR,
                        canTrade?GREEN_COLOR:ORANGE_COLOR);
@@ -4235,7 +4403,7 @@ void UpdateDashboard()
       }
 
       SymbolStats stats[];
-      int count = GetSymbolStats(stats);
+      int count = GetSymbolStatsCached(stats);
 
       int max_stats_offset =
          count - DATA_ROWS_VISIBLE;
@@ -4981,7 +5149,7 @@ void OnChartEvent(
       if(sparam == ObjName("STRAT_CLOSE_LIMIT"))
       {
          ReadManualInputs();
-         g_strategy_close_on_limit=!g_strategy_close_on_limit;
+         g_strategy_alert_on_limit=!g_strategy_alert_on_limit;
          SavePersistentState();
          ObjectSetInteger(0,sparam,OBJPROP_STATE,false);
          CreateDashboard();
@@ -5384,27 +5552,23 @@ void OnChartEvent(
 
    if(id == CHARTEVENT_CHART_CHANGE)
    {
-      int W =
-         (int)ChartGetInteger(
-            0,
-            CHART_WIDTH_IN_PIXELS,
-            0
-         );
+      int W = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0);
+      int H = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
 
-      int H =
-         (int)ChartGetInteger(
-            0,
-            CHART_HEIGHT_IN_PIXELS,
-            0
-         );
+      // Confronto con la dimensione REALE del grafico all'ultimo rebuild
+      // (non con g_width/g_height, che sono gia' clampati ai minimi).
+      bool size_changed =
+         MathAbs(W - g_chart_px_w) > 20 ||
+         MathAbs(H - g_chart_px_h) > 20;
 
-      if(
-         MathAbs(W-g_width) > 20 ||
-         MathAbs(H-g_height) > 20
-      )
+      // Debounce: CHART_CHANGE scatta di continuo durante drag/zoom.
+      static uint last_rebuild_ms = 0;
+      uint now_ms = GetTickCount();
+
+      if(size_changed && (now_ms - last_rebuild_ms) > 400)
       {
+         last_rebuild_ms = now_ms;
          CreateDashboard();
-
          UpdateDashboard();
       }
    }
@@ -5413,7 +5577,12 @@ void OnChartEvent(
 //+------------------------------------------------------------------+
 
 //====================================================================
-// RISK MANAGER - EVENTI TRADE
+// EVENTI TRADE
+//
+// Il monitor NON opera: qui ci limitiamo a marcare come "da ricalcolare"
+// le serie W/L, la pausa e la cache delle statistiche. Il ricalcolo
+// effettivo (lettura storico in ordine cronologico) avviene in
+// StrategyRefreshState / GetSymbolStatsCached, senza logica incrementale.
 //====================================================================
 void OnTradeTransaction(
    const MqlTradeTransaction &trans,
@@ -5424,52 +5593,8 @@ void OnTradeTransaction(
    if(trans.type!=TRADE_TRANSACTION_DEAL_ADD)
       return;
 
-   ulong deal=trans.deal;
-   if(deal==0 || deal==g_strategy_last_deal)
-      return;
+   g_strategy_force_refresh = true;
+   g_stats_cache_time       = 0;
 
-   if(!HistoryDealSelect(deal))
-      return;
-
-   if(!StrategyDealMatches(deal))
-      return;
-
-   ENUM_DEAL_ENTRY entry=
-      (ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);
-
-   if(entry!=DEAL_ENTRY_OUT &&
-      entry!=DEAL_ENTRY_OUT_BY &&
-      entry!=DEAL_ENTRY_INOUT)
-      return;
-
-   g_strategy_last_deal=deal;
-
-   double eur=
-      HistoryDealGetDouble(deal,DEAL_PROFIT)
-      + HistoryDealGetDouble(deal,DEAL_SWAP)
-      + HistoryDealGetDouble(deal,DEAL_COMMISSION);
-
-   if(eur>0.0000001)
-   {
-      g_strategy_consec_wins++;
-      g_strategy_consec_losses=0;
-   }
-   else
-   if(eur<-0.0000001)
-   {
-      g_strategy_consec_losses++;
-      g_strategy_consec_wins=0;
-
-      if(g_strategy_losses_before_pause>0 &&
-         g_strategy_consec_losses>=g_strategy_losses_before_pause)
-      {
-         g_strategy_pause_until=
-            TimeCurrent()+g_strategy_pause_minutes*60;
-
-         g_strategy_consec_losses=0;
-      }
-   }
-
-   SavePersistentState();
    StrategyRefreshState();
 }

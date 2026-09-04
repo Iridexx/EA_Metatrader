@@ -4695,10 +4695,10 @@ void ResetInputs()
       InpTargetCapital;
 
    g_live_total_days =
-      InpWorkingDays;
+      ClampWorkingDays(InpWorkingDays);
 
    g_sim_total_days =
-      InpWorkingDays;
+      ClampWorkingDays(InpWorkingDays);
 
    g_total_days =
       g_simulator_mode

@@ -4,7 +4,7 @@
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
 
-#property version   "3.11"
+#property version   "3.12"
 #property description "Trading Target Manager - Dashboard MT5"
 
 //====================================================================
@@ -13,7 +13,7 @@
 // riportare la voce nel file CHANGELOG.md. Tenere allineato anche
 // #property version qui sopra (formato MT5 "X.YZ", solo indicativo).
 //====================================================================
-#define APP_VERSION "3.1.1"
+#define APP_VERSION "3.1.2"
 
 //====================================================================
 // INPUT
@@ -2004,19 +2004,22 @@ void CreateDashboard()
    int navY = 92;
    int navGap = 12;
 
+   // Larghezze pensate per il testo a font 10: "RISK MONITOR" e
+   // "SIMULATORE" nei pulsanti precedenti erano troppo stretti e il
+   // testo veniva tagliato ai lati.
    int n1 = x + pad;
    int n2 = n1 + 110 + navGap;
    int n3 = n2 + 110 + navGap;
-   int n4 = n3 + 135 + navGap;
-   int n5 = n4 + 145 + navGap;
-   int n6 = n5 + 105 + navGap;
+   int n4 = n3 + 175 + navGap;
+   int n5 = n4 + 175 + navGap;
+   int n6 = n5 + 110 + navGap;
 
    CreateButton(ObjName("PAGE_DASH"), "LIVE",        n1, navY, 110, 32);
    CreateButton(ObjName("PAGE_ORD"),  "ORDINI",      n2, navY, 110, 32);
-   CreateButton(ObjName("PAGE_STRAT"),"RISK MONITOR",   n3, navY, 135, 32);
-   CreateButton(ObjName("PAGE_SIM"),  "SIMULATORE",  n4, navY, 145, 32);
-   CreateButton(ObjName("PAGE_PLAN"), "PIANO",       n5, navY, 105, 32);
-   CreateButton(ObjName("PAGE_STAT"), "STATISTICHE", n6, navY, 145, 32);
+   CreateButton(ObjName("PAGE_STRAT"),"RISK MONITOR",n3, navY, 175, 32);
+   CreateButton(ObjName("PAGE_SIM"),  "SIMULATORE",  n4, navY, 175, 32);
+   CreateButton(ObjName("PAGE_PLAN"), "PIANO",       n5, navY, 110, 32);
+   CreateButton(ObjName("PAGE_STAT"), "STATISTICHE", n6, navY, 165, 32);
 
    // ================================================================
    // PAGINA 1 - LIVE
@@ -2064,13 +2067,15 @@ void CreateDashboard()
       int ey2 = yParam + 150;
 
       CreateLabel(O_START_LABEL, "DATA INIZIO (AAAA.MM.GG)",
-                  c1, ly2, 220, 18, MUTED_COLOR, 8);
+                  c1, ly2, 260, 18, MUTED_COLOR, 9);
       CreateEdit(O_START_EDIT, TimeToString(g_start_date, TIME_DATE),
                  c1, ey2, 160, 34);
 
+      // Nota accostata al campo, sulla SUA riga (non a quella
+      // dell'etichetta sopra): evita di sovrapporsi al testo del titolo.
       CreateLabel(ObjName("START_HINT"),
-                  "Giorno 1 del percorso. Modificabile: premi INVIO per applicare.",
-                  c2, ly2+8, cw - (c2 - x) - pad, 18, MUTED_COLOR, 8);
+                  "Giorno 1 del percorso - premi INVIO per applicare",
+                  c1 + 190, ey2 + 9, cw - (c1 + 190 - x) - pad, 18, MUTED_COLOR, 9);
 
       // ACCOUNT
       int yAcc = 364;
@@ -2297,7 +2302,7 @@ void CreateDashboard()
 
       int yStatus = 1188;
       CreatePanel(PREFIX+"STATUS_BG", x, yStatus, cw, 58, PANEL_COLOR, BORDER_COLOR);
-      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 12);
+      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 11);
    }
 
    // ================================================================
@@ -2613,7 +2618,7 @@ void CreateDashboard()
 
       int yStatus = 544;
       CreatePanel(PREFIX+"STATUS_BG", x, yStatus, cw, 58, PANEL_COLOR, BORDER_COLOR);
-      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 12);
+      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 11);
 
       int ySym = 618;
       int hSym = MathMax(260, H-ySym-18);
@@ -2759,7 +2764,7 @@ void CreateDashboard()
 
       int yStatus = 448;
       CreatePanel(PREFIX+"STATUS_BG", x, yStatus, cw, 58, PANEL_COLOR, BORDER_COLOR);
-      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 12);
+      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 11);
 
       int ySym = 522;
       int hSym = MathMax(260, H-ySym-18);
@@ -2848,7 +2853,7 @@ void CreateDashboard()
 
       int yStatus = 274;
       CreatePanel(PREFIX+"STATUS_BG", x, yStatus, cw, 58, PANEL_COLOR, BORDER_COLOR);
-      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 12);
+      CreateLabel(O_STATUS, "", x+pad, yStatus+18, cw-pad*2, 24, GREEN_COLOR, 11);
 
       int ySym = 348;
       int hSym = MathMax(320, H-ySym-18);

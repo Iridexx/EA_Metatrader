@@ -22,6 +22,27 @@ _(niente per ora)_
 
 ---
 
+## [3.1.2] - 2026-09-04
+
+Bug visivi trovati testando la 3.1.1 su grafico reale.
+
+### Corretto
+- Pulsanti di navigazione **RISK MONITOR** e **SIMULATORE**: il testo veniva
+  tagliato ai due lati perché il pulsante era troppo stretto per il font
+  ingrandito in 3.1.1. Allargati (e riallineati gli altri pulsanti di
+  conseguenza).
+- Campo **DATA INIZIO**: l'etichetta e il testo di aiuto a fianco si
+  sovrapponevano. Il testo di aiuto è stato spostato sulla riga del campo
+  di input (a destra della casella), non più accanto all'etichetta.
+- Barra di stato: font ridotto di un punto (12→11) per ridurre il rischio
+  di testo troncato sui messaggi più lunghi.
+
+### Nota
+- Il file sorgente è stato rinominato da `..._V33_...` a `..._V34_...`
+  (contenuto identico, solo il nome).
+
+---
+
 ## [3.1.1] - 2026-09-04
 
 ### Modificato

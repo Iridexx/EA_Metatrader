@@ -219,8 +219,8 @@ bool g_target_reached = false;
 // DIMENSIONI
 //====================================================================
 
-int g_width  = 760;
-int g_height = 760;
+int g_width  = 1080;
+int g_height = 1290;
 
 // Dimensione reale (non clampata) del grafico all'ultimo rebuild.
 int g_chart_px_w = 0;
@@ -571,7 +571,9 @@ void CreateEdit(
 
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
    ObjectSetInteger(0,name,OBJPROP_ZORDER,100);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
+   // Coerente con gli altri oggetti della dashboard: nascosto dalla
+   // lista oggetti (Ctrl+B) ma comunque visibile e modificabile sul grafico.
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 
    ObjectSetString(
       0,
@@ -779,13 +781,21 @@ int WorkingDaysBetween(
       StructToTime(f);
 
    int count = 0;
+   int guard = 0;
 
-   while(current <= end)
+   // +12h a ogni passo e ri-normalizzazione a mezzanotte: evita che
+   // l'ora legale faccia "saltare" o contare due volte un giorno.
+   while(current <= end && guard < 4000)
    {
       if(IsWorkingDay(current))
          count++;
 
-      current += 86400;
+      MqlDateTime c;
+      TimeToStruct(current + 129600, c);   // +36h
+      c.hour = 0; c.min = 0; c.sec = 0;
+      current = StructToTime(c);
+
+      guard++;
    }
 
    return count;
@@ -1893,37 +1903,6 @@ bool LoadPersistentState()
    return found;
 }
 
-// Cerca il primo deal disponibile nello storico del conto.
-// Serve soltanto come fallback per recuperare una data storica
-// quando la V31 viene installata per la prima volta e non esiste
-// ancora uno stato persistente salvato.
-datetime FindEarliestAccountDealTime()
-{
-   if(!HistorySelect(0, TimeCurrent()))
-      return 0;
-
-   int total = HistoryDealsTotal();
-
-   datetime earliest = 0;
-
-   for(int i=0; i<total; i++)
-   {
-      ulong deal = HistoryDealGetTicket(i);
-      if(deal == 0)
-         continue;
-
-      datetime t = (datetime)HistoryDealGetInteger(deal, DEAL_TIME);
-
-      if(t <= 0)
-         continue;
-
-      if(earliest == 0 || t < earliest)
-         earliest = t;
-   }
-
-   return earliest;
-}
-
 //====================================================================
 // CONTROLLI SCORRIMENTO TABELLE
 //====================================================================
@@ -2659,7 +2638,7 @@ void CreateDashboard()
       for(int h=0; h<ArraySize(hdrs); h++)
          ObjectSetString(0,hdrs[h],OBJPROP_FONT,"Consolas");
 
-      for(int r=1; r<=30; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          int yy = rowY + (r-1)*rowStep;
          string rr = IntegerToString(r);
@@ -2785,7 +2764,7 @@ void CreateDashboard()
       int rowY = ySym + 74;
       int rowStep = 17;
 
-      for(int r=1; r<=30; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          string rn = ObjName("PLAN_TABLE_ROW_"+IntegerToString(r));
 
@@ -4041,7 +4020,7 @@ void UpdateDashboard()
                       "SIMULAZIONE DELLE GIORNATE");
 
       // Pulisce celle visibili.
-      for(int r=1; r<=30; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          string rr = IntegerToString(r);
 
@@ -4228,7 +4207,7 @@ void UpdateDashboard()
       ObjectSetString(0, O_SYMBOL_TITLE, OBJPROP_TEXT,
                       "PIANO GIORNALIERO: PERCENTUALI E IMPORTI");
 
-      for(int r=1; r<=30; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          string rn = ObjName("PLAN_TABLE_ROW_"+IntegerToString(r));
          if(ObjectFind(0,rn) >= 0)

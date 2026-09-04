@@ -8,6 +8,14 @@
 #property description "Trading Target Manager - Dashboard MT5"
 
 //====================================================================
+// VERSIONE
+// Fonte unica: aggiornare QUI a ogni modifica (schema X.Y.Z) e
+// riportare la voce nel file CHANGELOG.md. Tenere allineato anche
+// #property version qui sopra (formato MT5 "X.YZ", solo indicativo).
+//====================================================================
+#define APP_VERSION "3.1.0"
+
+//====================================================================
 // INPUT
 //====================================================================
 
@@ -239,6 +247,7 @@ int g_bar_w  = 1000;
 // Header
 string O_TITLE    = PREFIX + "TITLE";
 string O_SUBTITLE = PREFIX + "SUBTITLE";
+string O_VERSION  = PREFIX + "VERSION";
 
 // Parametri
 string O_PARAM_PANEL = PREFIX + "PARAM_PANEL";
@@ -1977,6 +1986,9 @@ void CreateDashboard()
    // ================================================================
    CreateLabel(O_TITLE, "TRADING TARGET MANAGER",
                x+pad, 16, cw-pad*2, 30, TEXT_COLOR, 17);
+
+   CreateLabel(O_VERSION, "v" + APP_VERSION,
+               x+cw-pad, 26, 120, 16, MUTED_COLOR, 8, ANCHOR_RIGHT_UPPER);
 
    CreateLabel(O_SUBTITLE,
                "Live tracking  |  Simulation  |  Daily plan  |  Statistics",

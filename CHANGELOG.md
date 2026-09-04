@@ -1,7 +1,7 @@
 # Changelog
 
 Tutte le modifiche rilevanti all'EA **Trading Target Manager**
-(`Target To Win/Target_For_win_V3_UI_REDESIGN_V33_STATS_GROSS_SWAP_FEES_NET.mq5`).
+(cartella `Target To Win/`).
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
 Versionamento **X.Y.Z**:
@@ -13,6 +13,12 @@ Versionamento **X.Y.Z**:
 La versione è definita in `#define APP_VERSION` nel sorgente ed è mostrata
 in alto a destra nell'header della dashboard. Ad ogni rilascio si crea il
 tag git corrispondente (`vX.Y.Z`).
+
+**Nome del file**: il `.mq5` (e il `.ex5` compilato) si chiama
+`Target_For_win_vX.Y.Z.mq5` — il nome cambia a ogni aggiornamento di
+`APP_VERSION`, così la versione è riconoscibile anche dal file/dal
+Navigator di MetaTrader, non solo dal badge nella dashboard. Il file
+della versione precedente viene rinominato (`git mv`), non duplicato.
 
 ---
 
@@ -38,8 +44,10 @@ Bug visivi trovati testando la 3.1.1 su grafico reale.
   di testo troncato sui messaggi più lunghi.
 
 ### Nota
-- Il file sorgente è stato rinominato da `..._V33_...` a `..._V34_...`
-  (contenuto identico, solo il nome).
+- Adottata la convenzione di naming `Target_For_win_vX.Y.Z.mq5`: il file
+  cambia nome a ogni versione. Rinominato da
+  `Target_For_win_V3_UI_REDESIGN_V34_STATS_GROSS_SWAP_FEES_NET.mq5` a
+  `Target_For_win_v3.1.2.mq5` (contenuto invariato).
 
 ---
 

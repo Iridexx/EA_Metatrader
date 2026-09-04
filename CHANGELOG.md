@@ -22,6 +22,19 @@ _(niente per ora)_
 
 ---
 
+## [3.1.1] - 2026-09-04
+
+### Modificato
+- **Leggibilità**: nessuna etichetta della dashboard sotto i 9 px (prima
+  molte erano a 7-8). Sottotitoli e didascalie delle card ingranditi.
+- Tabelle ORDINI, SIMULATORE, STATISTICHE, PIANO: righe più alte, colonne
+  più distanziate, celle numeriche in carattere monospazio (Consolas) per
+  un allineamento pulito.
+- Dimensione minima della dashboard portata a 1280×1320 px così le tabelle
+  larghe (ORDINI in particolare) rientrano sempre nel pannello.
+
+---
+
 ## [3.1.0] - 2026-09-04
 
 Prima versione tracciata. Raccoglie la review completa del sorgente e le

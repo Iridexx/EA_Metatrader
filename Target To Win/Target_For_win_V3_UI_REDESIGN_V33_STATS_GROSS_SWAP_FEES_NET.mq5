@@ -4,7 +4,7 @@
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
 
-#property version   "3.10"
+#property version   "3.11"
 #property description "Trading Target Manager - Dashboard MT5"
 
 //====================================================================
@@ -13,7 +13,7 @@
 // riportare la voce nel file CHANGELOG.md. Tenere allineato anche
 // #property version qui sopra (formato MT5 "X.YZ", solo indicativo).
 //====================================================================
-#define APP_VERSION "3.1.0"
+#define APP_VERSION "3.1.1"
 
 //====================================================================
 // INPUT
@@ -227,8 +227,8 @@ bool g_target_reached = false;
 // DIMENSIONI
 //====================================================================
 
-int g_width  = 1080;
-int g_height = 1290;
+int g_width  = 1280;
+int g_height = 1320;
 
 // Dimensione reale (non clampata) del grafico all'ultimo rebuild.
 int g_chart_px_w = 0;
@@ -440,6 +440,10 @@ void CreateLabel(
    ENUM_ANCHOR_POINT anchor = ANCHOR_LEFT_UPPER
 )
 {
+   // Soglia minima di leggibilita': nessuna etichetta sotto i 9 px.
+   if(fontsize < 9)
+      fontsize = 9;
+
    if(ObjectFind(0,name) < 0)
    {
       ObjectCreate(
@@ -1965,8 +1969,8 @@ void CreateDashboard()
    g_chart_px_w = W;
    g_chart_px_h = H;
 
-   if(W < 1080) W = 1080;
-   if(H < 1290) H = 1290;
+   if(W < 1280) W = 1280;
+   if(H < 1320) H = 1320;
 
    g_width  = W;
    g_height = H;
@@ -2354,47 +2358,55 @@ void CreateDashboard()
       );
 
       int tableX = x + pad;
-      int hdrY = ySym + 50;
-      int rowY = ySym + 80;
-      int rowStep = 24;
+      int hdrY = ySym + 52;
+      int rowY = ySym + 84;
+      int rowStep = 26;
 
       int xSym   = tableX;
-      int xType  = tableX + 115;
-      int xLot   = tableX + 185;
-      int xEntry = tableX + 260;
-      int xNow   = tableX + 405;
-      int xPL    = tableX + 550;
-      int xSL    = tableX + 665;
-      int xTP    = tableX + 800;
-      int xTPeur = tableX + 935;
-      int xSLeur = tableX + 1060;
+      int xType  = tableX + 130;
+      int xLot   = tableX + 195;
+      int xEntry = tableX + 265;
+      int xNow   = tableX + 390;
+      int xPL    = tableX + 515;
+      int xSL    = tableX + 635;
+      int xTP    = tableX + 760;
+      int xTPeur = tableX + 885;
+      int xSLeur = tableX + 1005;
 
-      CreateLabel(ObjName("ORD_HDR_SYM"),   "SIMBOLO", xSym,   hdrY, 105,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_TYPE"),  "TIPO",    xType,  hdrY, 60,18, MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_LOT"),   "LOTTI",   xLot,   hdrY, 65,18, MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_ENTRY"), "ENTRY",   xEntry, hdrY, 130,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_NOW"),   "PREZZO",  xNow,   hdrY, 130,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_PL"),    "P/L",     xPL,    hdrY, 100,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_SL"),    "SL",      xSL,    hdrY, 120,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_TP"),    "TP",      xTP,    hdrY, 120,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_TPE"),   "P/L@TP",  xTPeur, hdrY, 110,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("ORD_HDR_SLE"),   "P/L@SL",  xSLeur, hdrY, 110,18,MUTED_COLOR,8);
+      CreateLabel(ObjName("ORD_HDR_SYM"),   "SIMBOLO", xSym,   hdrY, 125,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_TYPE"),  "TIPO",    xType,  hdrY, 60,18, MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_LOT"),   "LOTTI",   xLot,   hdrY, 65,18, MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_ENTRY"), "ENTRY",   xEntry, hdrY, 120,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_NOW"),   "PREZZO",  xNow,   hdrY, 120,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_PL"),    "P/L",     xPL,    hdrY, 110,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_SL"),    "SL",      xSL,    hdrY, 120,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_TP"),    "TP",      xTP,    hdrY, 120,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_TPE"),   "P/L@TP",  xTPeur, hdrY, 115,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("ORD_HDR_SLE"),   "P/L@SL",  xSLeur, hdrY, 115,18,MUTED_COLOR,9);
 
       for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          int yy = rowY + (r-1)*rowStep;
          string rr = IntegerToString(r);
 
-         CreateLabel(ObjName("ORD_SYM_"+rr),   " ", xSym,   yy,105,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_TYPE_"+rr),  " ", xType,  yy,60,20, TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_LOT_"+rr),   " ", xLot,   yy,65,20, TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_ENTRY_"+rr), " ", xEntry, yy,130,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_NOW_"+rr),   " ", xNow,   yy,130,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_PL_"+rr),    " ", xPL,    yy,100,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("ORD_SL_"+rr),    " ", xSL,    yy,120,20,MUTED_COLOR,8);
-         CreateLabel(ObjName("ORD_TP_"+rr),    " ", xTP,    yy,120,20,MUTED_COLOR,8);
-         CreateLabel(ObjName("ORD_TPE_"+rr),   " ", xTPeur, yy,110,20,GREEN_COLOR,8);
-         CreateLabel(ObjName("ORD_SLE_"+rr),   " ", xSLeur, yy,110,20,RED_COLOR,8);
+         CreateLabel(ObjName("ORD_SYM_"+rr),   " ", xSym,   yy,125,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_TYPE_"+rr),  " ", xType,  yy,60,20, TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_LOT_"+rr),   " ", xLot,   yy,65,20, TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_ENTRY_"+rr), " ", xEntry, yy,120,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_NOW_"+rr),   " ", xNow,   yy,120,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_PL_"+rr),    " ", xPL,    yy,110,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("ORD_SL_"+rr),    " ", xSL,    yy,120,20,MUTED_COLOR,9);
+         CreateLabel(ObjName("ORD_TP_"+rr),    " ", xTP,    yy,120,20,MUTED_COLOR,9);
+         CreateLabel(ObjName("ORD_TPE_"+rr),   " ", xTPeur, yy,115,20,GREEN_COLOR,9);
+         CreateLabel(ObjName("ORD_SLE_"+rr),   " ", xSLeur, yy,115,20,RED_COLOR,9);
+
+         string ordcells[] = {
+            ObjName("ORD_LOT_"+rr),ObjName("ORD_ENTRY_"+rr),ObjName("ORD_NOW_"+rr),
+            ObjName("ORD_PL_"+rr),ObjName("ORD_SL_"+rr),ObjName("ORD_TP_"+rr),
+            ObjName("ORD_TPE_"+rr),ObjName("ORD_SLE_"+rr)
+         };
+         for(int c=0; c<ArraySize(ordcells); c++)
+            ObjectSetString(0,ordcells[c],OBJPROP_FONT,"Consolas");
       }
    }
 
@@ -2619,19 +2631,19 @@ void CreateDashboard()
       // TABELLA SIMULATORE A COLONNE REALI
       // -------------------------------------------------------------
       int tableX = x + pad;
-      int hdrY   = ySym + 50;
-      int rowY   = ySym + 80;
-      int rowStep = 22;
+      int hdrY   = ySym + 52;
+      int rowY   = ySym + 84;
+      int rowStep = 25;
 
       // Larghezze / posizioni colonne
       int xGG      = tableX;
-      int xStart   = tableX + 55;
-      int xTarget  = tableX + 205;
-      int xResult  = tableX + 365;
-      int xClose   = tableX + 525;
-      int xDelta   = tableX + 675;
-      int xPct     = tableX + 825;
-      int xState   = tableX + 955;
+      int xStart   = tableX + 60;
+      int xTarget  = tableX + 215;
+      int xResult  = tableX + 375;
+      int xClose   = tableX + 535;
+      int xDelta   = tableX + 690;
+      int xPct     = tableX + 840;
+      int xState   = tableX + 965;
 
       CreateLabel(ObjName("SIM_HDR_GG"),     "GG",        xGG,     hdrY, 45, 18, MUTED_COLOR, 9);
       CreateLabel(ObjName("SIM_HDR_START"),  "PARTENZA",  xStart,  hdrY, 135,18, MUTED_COLOR, 9);
@@ -2773,8 +2785,8 @@ void CreateDashboard()
       );
       ObjectSetString(0,ObjName("PLAN_TABLE_HDR"),OBJPROP_FONT,"Consolas");
 
-      int rowY = ySym + 74;
-      int rowStep = 17;
+      int rowY = ySym + 78;
+      int rowStep = 20;
 
       for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
@@ -2786,9 +2798,9 @@ void CreateDashboard()
             x+pad,
             rowY + (r-1)*rowStep,
             cw-pad*2,
-            17,
+            18,
             TEXT_COLOR,
-            8
+            9
          );
 
          ObjectSetString(0,rn,OBJPROP_FONT,"Consolas");
@@ -2883,44 +2895,52 @@ void CreateDashboard()
       );
 
       int tableX = x + pad;
-      int hdrY   = ySym + 96;
-      int rowY   = ySym + 124;
-      int rowStep = 23;
+      int hdrY   = ySym + 98;
+      int rowY   = ySym + 128;
+      int rowStep = 25;
 
       int xSym   = tableX;
-      int xTrade = tableX + 135;
-      int xWin   = tableX + 215;
-      int xLoss  = tableX + 285;
-      int xGross = tableX + 365;
-      int xSwap  = tableX + 500;
-      int xComm  = tableX + 625;
-      int xNet   = tableX + 765;
-      int xWR    = tableX + 910;
+      int xTrade = tableX + 150;
+      int xWin   = tableX + 235;
+      int xLoss  = tableX + 300;
+      int xGross = tableX + 375;
+      int xSwap  = tableX + 525;
+      int xComm  = tableX + 665;
+      int xNet   = tableX + 825;
+      int xWR    = tableX + 985;
 
-      CreateLabel(ObjName("STAT_HDR_SYM"),   "SIMBOLO",     xSym,   hdrY,125,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_TRADE"), "TRADE",       xTrade, hdrY,70,18, MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_WIN"),   "WIN",         xWin,   hdrY,60,18, MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_LOSS"),  "LOSS",        xLoss,  hdrY,65,18, MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_GROSS"), "PROFIT LORDO",xGross, hdrY,125,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_SWAP"),  "SWAP",        xSwap,  hdrY,115,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_COMM"),  "COMMISSIONI", xComm,  hdrY,130,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_PL"),    "NETTO",       xNet,   hdrY,135,18,MUTED_COLOR,8);
-      CreateLabel(ObjName("STAT_HDR_WR"),    "WIN RATE",    xWR,    hdrY,110,18,MUTED_COLOR,8);
+      CreateLabel(ObjName("STAT_HDR_SYM"),   "SIMBOLO",     xSym,   hdrY,140,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_TRADE"), "TRADE",       xTrade, hdrY,70,18, MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_WIN"),   "WIN",         xWin,   hdrY,60,18, MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_LOSS"),  "LOSS",        xLoss,  hdrY,65,18, MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_GROSS"), "PROFIT LORDO",xGross, hdrY,140,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_SWAP"),  "SWAP",        xSwap,  hdrY,130,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_COMM"),  "COMMISSIONI", xComm,  hdrY,150,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_PL"),    "NETTO",       xNet,   hdrY,150,18,MUTED_COLOR,9);
+      CreateLabel(ObjName("STAT_HDR_WR"),    "WIN RATE",    xWR,    hdrY,120,18,MUTED_COLOR,9);
 
-      for(int r=1; r<=25; r++)
+      for(int r=1; r<=DATA_ROWS_VISIBLE; r++)
       {
          int yy = rowY + (r-1)*rowStep;
          string rr = IntegerToString(r);
 
-         CreateLabel(ObjName("STAT_SYM_"+rr),   " ", xSym,   yy,125,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_TRADE_"+rr), " ", xTrade, yy,70,20, TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_WIN_"+rr),   " ", xWin,   yy,60,20, TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_LOSS_"+rr),  " ", xLoss,  yy,65,20, TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_GROSS_"+rr), " ", xGross, yy,125,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_SWAP_"+rr),  " ", xSwap,  yy,115,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_COMM_"+rr),  " ", xComm,  yy,130,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_PL_"+rr),    " ", xNet,   yy,135,20,TEXT_COLOR,8);
-         CreateLabel(ObjName("STAT_WR_"+rr),    " ", xWR,    yy,110,20,TEXT_COLOR,8);
+         CreateLabel(ObjName("STAT_SYM_"+rr),   " ", xSym,   yy,140,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_TRADE_"+rr), " ", xTrade, yy,70,20, TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_WIN_"+rr),   " ", xWin,   yy,60,20, TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_LOSS_"+rr),  " ", xLoss,  yy,65,20, TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_GROSS_"+rr), " ", xGross, yy,140,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_SWAP_"+rr),  " ", xSwap,  yy,130,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_COMM_"+rr),  " ", xComm,  yy,150,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_PL_"+rr),    " ", xNet,   yy,150,20,TEXT_COLOR,9);
+         CreateLabel(ObjName("STAT_WR_"+rr),    " ", xWR,    yy,120,20,TEXT_COLOR,9);
+
+         string statcells[] = {
+            ObjName("STAT_TRADE_"+rr),ObjName("STAT_WIN_"+rr),ObjName("STAT_LOSS_"+rr),
+            ObjName("STAT_GROSS_"+rr),ObjName("STAT_SWAP_"+rr),ObjName("STAT_COMM_"+rr),
+            ObjName("STAT_PL_"+rr),ObjName("STAT_WR_"+rr)
+         };
+         for(int c=0; c<ArraySize(statcells); c++)
+            ObjectSetString(0,statcells[c],OBJPROP_FONT,"Consolas");
       }
    }
 

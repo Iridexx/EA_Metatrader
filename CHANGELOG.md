@@ -28,6 +28,28 @@ _(niente per ora)_
 
 ---
 
+## [3.1.3] - 2026-09-05
+
+Bug segnalato: di sabato la dashboard mostrava comunque un obiettivo
+giornaliero e uno stato "OGGI SOPRA/SOTTO TARGET" come se fosse un giorno
+di trading, invece di riconoscere che il mercato è chiuso nel weekend.
+
+### Corretto
+- **Pagina LIVE**: se oggi non è un giorno lavorativo (sabato/domenica),
+  l'obiettivo di oggi, la barra di progresso giornaliero e il messaggio di
+  stato ora mostrano "MERCATO CHIUSO (WEEKEND)" invece di calcolare un
+  target come se si dovesse fare trading. Vale solo per il percorso LIVE,
+  non per il Simulatore (che usa giorni manuali, non il calendario).
+- **RISK MONITOR**: `StrategyCanTrade()` restituisce ora "MERCATO CHIUSO
+  (WEEKEND)" nel weekend; la riga "TARGET OGGI" mostra lo stesso avviso
+  invece di un importo.
+- **Conteggio giorni**: nel weekend il giorno corrente (Venerdì) veniva
+  considerato ancora "in corso" invece che completato, sfalsando di 1 il
+  conteggio "Giorno X / Y" e il target giornaliero. Corretto in
+  `CalculateTarget()` e `LiveCompletedDays()`.
+
+---
+
 ## [3.1.2] - 2026-09-04
 
 Bug visivi trovati testando la 3.1.1 su grafico reale.

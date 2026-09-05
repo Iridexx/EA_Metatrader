@@ -4,7 +4,7 @@
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
 
-#property version   "3.12"
+#property version   "3.13"
 #property description "Trading Target Manager - Dashboard MT5"
 
 //====================================================================
@@ -13,7 +13,7 @@
 // riportare la voce nel file CHANGELOG.md. Tenere allineato anche
 // #property version qui sopra (formato MT5 "X.YZ", solo indicativo).
 //====================================================================
-#define APP_VERSION "3.1.2"
+#define APP_VERSION "3.1.3"
 
 //====================================================================
 // INPUT
@@ -1090,15 +1090,24 @@ void CalculateTarget()
    }
    else
    {
-      // Giorni lavorativi "toccati" dal percorso, incluso oggi.
+      // Giorni lavorativi "toccati" dal percorso, incluso oggi
+      // (se oggi e' un giorno lavorativo).
       int working_days_seen =
          WorkingDaysBetween(
             g_start_date,
             TimeCurrent()
          );
 
-      // I giorni COMPLETATI sono quelli precedenti a oggi.
-      completed_days = working_days_seen - 1;
+      // I giorni COMPLETATI sono quelli precedenti a oggi, MA solo se
+      // oggi e' effettivamente un giorno lavorativo (altrimenti oggi
+      // non e' "in corso": tutti i giorni contati sono gia' completi,
+      // es. nel weekend non si sottrae il sabato/domenica che non
+      // sono mai stati conteggiati in working_days_seen).
+      completed_days =
+         IsWorkingDay(TimeCurrent())
+         ? working_days_seen - 1
+         : working_days_seen;
+
       if(completed_days < 0)
          completed_days = 0;
 
@@ -1549,7 +1558,7 @@ string StrategyScopeText()
 int LiveCompletedDays()
 {
    int seen = WorkingDaysBetween(g_start_date, TimeCurrent());
-   int completed = seen - 1;
+   int completed = IsWorkingDay(TimeCurrent()) ? seen - 1 : seen;
    if(completed < 0) completed = 0;
    if(completed > g_live_total_days) completed = g_live_total_days;
    return completed;
@@ -1713,6 +1722,12 @@ bool StrategyCanTrade(string &reason)
    if(!g_strategy_enabled)
    {
       reason="MONITOR OFF";
+      return false;
+   }
+
+   if(!IsWorkingDay(TimeCurrent()))
+   {
+      reason="MERCATO CHIUSO (WEEKEND)";
       return false;
    }
 
@@ -3249,6 +3264,11 @@ void UpdateDashboard()
    if(today_missing < 0)
       today_missing = 0;
 
+   // Oggi il mercato e' chiuso (weekend)? Vale solo per il percorso LIVE:
+   // nel simulatore i "giorni" sono manuali e non seguono il calendario.
+   bool market_closed_today =
+      (!g_simulator_mode && !IsWorkingDay(TimeCurrent()));
+
    // ================================================================
    // OBIETTIVO DI OGGI
    // ================================================================
@@ -3274,6 +3294,18 @@ void UpdateDashboard()
 
       ObjectSetInteger(0, O_REQUIRED_PCT, OBJPROP_COLOR, RED_COLOR);
       ObjectSetInteger(0, O_REQUIRED_EURO, OBJPROP_COLOR, RED_COLOR);
+   }
+   else
+   if(market_closed_today)
+   {
+      ObjectSetString(0, O_REQUIRED_PCT, OBJPROP_TEXT,
+                      "MERCATO CHIUSO (WEEKEND)");
+
+      ObjectSetString(0, O_REQUIRED_EURO, OBJPROP_TEXT,
+                      "Nessun obiettivo per oggi");
+
+      ObjectSetInteger(0, O_REQUIRED_PCT, OBJPROP_COLOR, MUTED_COLOR);
+      ObjectSetInteger(0, O_REQUIRED_EURO, OBJPROP_COLOR, MUTED_COLOR);
    }
    else
    {
@@ -3343,7 +3375,9 @@ void UpdateDashboard()
       ObjectSetInteger(0,ObjName("STRAT_STATE"),OBJPROP_COLOR,sc);
 
       ObjectSetString(0,ObjName("STRAT_D_TARGET"),OBJPROP_TEXT,
-                      "TARGET OGGI  +"+DoubleToString(target,2)+" EUR");
+                      !IsWorkingDay(TimeCurrent())
+                      ? "TARGET OGGI  MERCATO CHIUSO (WEEKEND)"
+                      : "TARGET OGGI  +"+DoubleToString(target,2)+" EUR");
 
       ObjectSetString(0,ObjName("STRAT_D_REAL"),OBJPROP_TEXT,
                       "REALIZZATO  "+(closed>=0?"+":"")+DoubleToString(closed,2)+" EUR");
@@ -3412,6 +3446,34 @@ void UpdateDashboard()
    // ================================================================
    if(g_current_page == 1)
    {
+      if(market_closed_today)
+      {
+         // Weekend: nessun obiettivo giornaliero, barra a riposo.
+         if(ObjectFind(0,ObjName("DAILY_BAR")) >= 0)
+         {
+            ObjectSetInteger(0,ObjName("DAILY_BAR"),OBJPROP_XSIZE,1);
+            ObjectSetInteger(0,ObjName("DAILY_BAR"),OBJPROP_BGCOLOR,MUTED_COLOR);
+            ObjectSetInteger(0,ObjName("DAILY_BAR"),OBJPROP_COLOR,MUTED_COLOR);
+         }
+
+         ObjectSetString(0,ObjName("DAILY_CURRENT"),OBJPROP_TEXT,"MERCATO CHIUSO");
+         ObjectSetInteger(0,ObjName("DAILY_CURRENT"),OBJPROP_COLOR,MUTED_COLOR);
+
+         ObjectSetString(0,ObjName("DAILY_MISSING"),OBJPROP_TEXT,"WEEKEND");
+         ObjectSetInteger(0,ObjName("DAILY_MISSING"),OBJPROP_COLOR,MUTED_COLOR);
+
+         ObjectSetString(0,ObjName("DAILY_TARGET"),OBJPROP_TEXT,"—");
+         ObjectSetInteger(0,ObjName("DAILY_TARGET"),OBJPROP_COLOR,MUTED_COLOR);
+
+         ObjectSetString(0,ObjName("DAILY_PROGRESS_TEXT"),OBJPROP_TEXT,
+                         "NESSUNA GIORNATA DI TRADING OGGI (MERCATO CHIUSO)");
+         ObjectSetInteger(0,ObjName("DAILY_PROGRESS_TEXT"),OBJPROP_COLOR,MUTED_COLOR);
+
+         ObjectSetString(0,ObjName("DAILY_REALIZED_TEXT"),OBJPROP_TEXT,"");
+         ObjectSetString(0,ObjName("DAILY_FLOATING_TEXT"),OBJPROP_TEXT,"");
+      }
+      else
+      {
       double realized_today_for_bar = GetTodayClosedResult();
       double floating_today_for_bar = GetOpenFloatingResult();
 
@@ -3638,6 +3700,7 @@ void UpdateDashboard()
               : MUTED_COLOR
          );
       }
+      }
    }
 
    // ================================================================
@@ -3753,6 +3816,14 @@ void UpdateDashboard()
                       "TEMPO TERMINATO  |  MANCANO " +
                       DoubleToString(missing_total,2) + " EUR");
       ObjectSetInteger(0, O_STATUS, OBJPROP_COLOR, RED_COLOR);
+   }
+   else
+   if(market_closed_today)
+   {
+      ObjectSetString(0, O_STATUS, OBJPROP_TEXT,
+                      "WEEKEND  |  MERCATO CHIUSO, NESSUN OBIETTIVO GIORNALIERO  |  " +
+                      "PROGRESSO GENERALE " + DoubleToString(g_progress,1) + "%");
+      ObjectSetInteger(0, O_STATUS, OBJPROP_COLOR, MUTED_COLOR);
    }
    else
    if(today_actual_result < -0.005)
